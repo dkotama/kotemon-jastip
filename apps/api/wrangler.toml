@@ -1,0 +1,26 @@
+name = "kotemon-jastip"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "kotemon-jastip-db"
+database_id = "38c029c2-b43a-4edc-8f94-cb2af02d7d85"
+
+# R2 Bucket
+[[r2_buckets]]
+binding = "PHOTOS_BUCKET"
+bucket_name = "kotemon-jastip-photos"
+
+# Environment Variables
+[vars]
+DEFAULT_EXCHANGE_RATE = "108.5"
+DEFAULT_MARGIN_PERCENT = "30"
+DEFAULT_BAGGAGE_QUOTA_GRAMS = "20000"
+GOOGLE_CLIENT_ID = "738635943854-58oaehg7i2ghd6ec6ekfh906ppi76ls3.apps.googleusercontent.com"
+GOOGLE_REDIRECT_URI = "https://jastip.dkotama.com/api/auth/google/callback"
+
+# Secrets (set via wrangler secret put)
+# ADMIN_PASSWORD_HASH
+# GOOGLE_CLIENT_SECRET

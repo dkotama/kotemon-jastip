@@ -1,0 +1,1591 @@
+openapi: 3.0.3
+info:
+  title: Kotemon Jastip API
+  description: |
+    API for Kotemon Jastip - A personal shopping service from Japan to Indonesia.
+
+    ## Authentication
+
+    This API uses two authentication methods:
+
+    1. **Cookie-based** (`cookieAuth`): For regular user sessions after Google OAuth
+       - Session cookie name: `jastip_session`
+       - Used by: `/api/auth/*` endpoints (except login/init)
+
+    2. **Bearer Token** (`bearerAuth`): For admin access
+       - Header: `Authorization: Bearer <admin_password>`
+       - Used by: All `/api/admin/*` endpoints
+
+    ## Pricing Model
+
+    The API uses a three-field pricing model:
+
+    - **basePriceYen** (integer): Original price in Japanese Yen (admin enters)
+    - **basePriceRp** (integer): Calculated base price in IDR = `basePriceYen × exchangeRate`
+    - **sellingPriceRp** (integer): Final selling price in IDR (manual entry)
+
+    **Profit calculation:** `profit = sellingPriceRp - basePriceRp`
+
+    The `basePriceRp` is automatically calculated when creating or updating items based on the current
+    `exchangeRate` stored in settings. When `basePriceYen` is updated via PATCH, `basePriceRp` is
+    recalculated using the current exchange rate.
+
+    ## Environment Variables
+
+    Required environment variables:
+    - `JWT_SECRET` - Secret for signing session tokens
+    - `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
+    - `DB` - D1 database binding
+    - `PHOTOS_BUCKET` - R2 bucket for photo storage
+  version: 1.0.0
+  contact:
+    name: Kotemon Jastip Support
+    email: support@kotemon.com
+
+servers:
+  - url: https://jastip.dkotama.com/api
+    description: Production server
+  - url: http://localhost:8787/api
+    description: Local development server
+
+paths:
+  # Public Routes
+  /public/config:
+    get:
+      summary: Get public jastip configuration
+      description: Retrieves current jastip status, countdown, and baggage quota information
+      tags:
+        - Public
+      operationId: getPublicConfig
+      responses:
+        '200':
+          description: Configuration retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/PublicConfig'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /public/items:
+    get:
+      summary: List available items
+      description: Retrieves all published and available items for public viewing
+      tags:
+        - Public
+      operationId: listPublicItems
+      parameters:
+        - name: search
+          in: query
+          description: Search term to filter items by name
+          schema:
+            type: string
+            example: "pokemon"
+        - name: limit
+          in: query
+          description: Maximum number of items to return (max 100)
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+            example: 20
+        - name: offset
+          in: query
+          description: Number of items to skip for pagination
+          schema:
+            type: integer
+            default: 0
+            example: 0
+      responses:
+        '200':
+          description: Items retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PublicItem'
+                      total:
+                        type: integer
+                        description: Total number of items returned
+                        example: 10
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /public/items/{id}:
+    get:
+      summary: Get single item details
+      description: Retrieves detailed information about a specific item
+      tags:
+        - Public
+      operationId: getPublicItem
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the item
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Item retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/PublicItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /public/items/{id}/view:
+    post:
+      summary: Increment item view count
+      description: Increments the view counter for an item and returns the new count
+      tags:
+        - Public
+      operationId: incrementItemView
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the item
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: View count incremented successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  viewCount:
+                    type: integer
+                    description: New view count after increment
+                    example: 42
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /public/photos/{path}:
+    get:
+      summary: Serve photo from R2 storage
+      description: |
+        Serves photos stored in R2 bucket. The path should include the full path
+        after `/api/public/photos/`, typically `uploads/{filename}`.
+      tags:
+        - Public
+      operationId: servePhoto
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: Full path to the photo in R2 (e.g., "uploads/abc123.jpg")
+          schema:
+            type: string
+            example: "uploads/550e8400-e29b-41d4-a716-446655440000.jpg"
+      responses:
+        '200':
+          description: Photo served successfully
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: "public, max-age=31536000"
+        '404':
+          description: Photo not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # Auth Routes
+  /auth/google:
+    get:
+      summary: Initiate Google OAuth flow
+      description: |
+        Redirects the user to Google's OAuth consent screen.
+        After authorization, user is redirected to `/api/auth/google/callback`.
+      tags:
+        - Authentication
+      operationId: initiateGoogleOAuth
+      parameters:
+        - name: frontend
+          in: query
+          description: Frontend URL to redirect back to after authentication
+          schema:
+            type: string
+            format: uri
+            default: "https://jastip.dkotama.com"
+            example: "https://jastip.dkotama.com"
+      responses:
+        '302':
+          description: Redirects to Google OAuth consent screen
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+              description: Google OAuth authorization URL
+            Set-Cookie:
+              schema:
+                type: string
+              description: OAuth state cookie for CSRF protection
+
+  /auth/google/callback:
+    get:
+      summary: Google OAuth callback
+      description: |
+        Handles the callback from Google after OAuth authorization.
+        For existing users: Sets session cookie and redirects to frontend with token.
+        For new users: Creates temp session and redirects to token verification page.
+      tags:
+        - Authentication
+      operationId: googleOAuthCallback
+      parameters:
+        - name: code
+          in: query
+          description: Authorization code from Google
+          schema:
+            type: string
+        - name: state
+          in: query
+          description: State parameter for CSRF protection
+          schema:
+            type: string
+        - name: error
+          in: query
+          description: Error message if OAuth was denied
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirects to frontend with token or error
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+              description: |
+                Redirect URL:
+                - Existing users: `{frontend}?token={jwt}`
+                - New users: `{frontend}/verify-token?tempToken={jwt}`
+                - Errors: `{frontend}?error={error_code}`
+            Set-Cookie:
+              schema:
+                type: string
+              description: Session or temp session cookie
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/verify-token:
+    post:
+      summary: Verify invite token and create user
+      description: |
+        Verifies an invite token and completes user registration for new OAuth users.
+        Requires a valid temp session (from cookie or request body).
+      tags:
+        - Authentication
+      operationId: verifyInviteToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+                  description: Invite token code (e.g., "KOTEMON2025")
+                  example: "KOTEMON2025"
+                tempToken:
+                  type: string
+                  description: Temp session token (for cross-origin requests)
+                  example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: Token verified and user created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/User'
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: |
+                Two cookies are set:
+                1. Clears the temp session cookie
+                2. Sets the session cookie (`jastip_session`)
+        '400':
+          description: Invalid or expired invite token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Session expired or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/logout:
+    post:
+      summary: Logout user
+      description: Clears the session cookie and logs out the user
+      tags:
+        - Authentication
+      operationId: logout
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Clears the session cookie
+
+  /auth/me:
+    get:
+      summary: Get current user info
+      description: Retrieves information about the currently authenticated user
+      tags:
+        - Authentication
+      operationId: getCurrentUser
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: User info retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: User account has been revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/status:
+    get:
+      summary: Check authentication status
+      description: |
+        Quick endpoint to check if user is authenticated.
+        Returns authenticated status without full user details.
+      tags:
+        - Authentication
+      operationId: checkAuthStatus
+      responses:
+        '200':
+          description: Authentication status retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      authenticated:
+                        type: boolean
+                        example: true
+                      user:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            example: "550e8400-e29b-41d4-a716-446655440000"
+                          name:
+                            type: string
+                            example: "John Doe"
+                      revoked:
+                        type: boolean
+                        description: Set to true if user's access was revoked
+                        example: false
+
+  /auth/test/mock-oauth:
+    post:
+      summary: Mock OAuth for testing (DEVELOPMENT ONLY)
+      description: |
+        Creates a mock Google OAuth user for local testing.
+        Only available on localhost.
+      tags:
+        - Authentication
+      operationId: mockOAuth
+      responses:
+        '200':
+          description: Mock user created or logged in
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: "New user - needs token verification"
+                      tempToken:
+                        type: string
+                        description: Temp token for new users
+                      sessionToken:
+                        type: string
+                        description: Session token for existing users
+                      user:
+                        oneOf:
+                          - $ref: '#/components/schemas/User'
+                          - $ref: '#/components/schemas/TempOAuthSession'
+        '403':
+          description: Not available on non-localhost environments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # Admin Routes
+  /admin/login:
+    post:
+      summary: Admin password login
+      description: Authenticates admin using the configured password
+      tags:
+        - Admin
+      operationId: adminLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - password
+              properties:
+                password:
+                  type: string
+                  description: Admin password
+                  example: "admin-secret-password"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                        description: The password itself is used as bearer token
+                        example: "admin-secret-password"
+        '401':
+          description: Invalid password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/settings:
+    get:
+      summary: Get jastip settings
+      description: Retrieves all jastip settings (admin view with sensitive data)
+      tags:
+        - Admin
+      operationId: getAdminSettings
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Settings retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Settings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update jastip settings
+      description: Updates jastip configuration settings
+      tags:
+        - Admin
+      operationId: updateAdminSettings
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSettingsPayload'
+      responses:
+        '200':
+          description: Settings updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Settings'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/items:
+    get:
+      summary: List all items (admin view)
+      description: Retrieves all items including drafts and unavailable items
+      tags:
+        - Admin
+      operationId: listAdminItems
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Items retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Item'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Create new item
+      description: Creates a new jastip item
+      tags:
+        - Admin
+      operationId: createItem
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateItemPayload'
+      responses:
+        '201':
+          description: Item created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Item'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/items/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: UUID of the item
+        schema:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+    get:
+      summary: Get single item (admin view)
+      description: Retrieves full item details including private fields
+      tags:
+        - Admin
+      operationId: getAdminItem
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Item retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Item'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update item
+      description: Updates an existing item (partial updates supported)
+      tags:
+        - Admin
+      operationId: updateItem
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateItemPayload'
+      responses:
+        '200':
+          description: Item updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Item'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete item
+      description: |
+        Soft deletes an item (sets isAvailable=false).
+        Use `?force=true` for hard delete (only if no orders exist).
+      tags:
+        - Admin
+      operationId: deleteItem
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: force
+          in: query
+          description: Force hard delete (only allowed if item has no orders)
+          schema:
+            type: boolean
+            default: false
+            example: false
+      responses:
+        '200':
+          description: Item deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '400':
+          description: Item has orders and cannot be hard deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Item has orders. Hide it instead or use force=true to delete anyway."
+                  hasOrders:
+                    type: boolean
+                    example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/upload:
+    post:
+      summary: Upload photo to R2
+      description: Uploads a photo to the R2 bucket for use in items
+      tags:
+        - Admin
+      operationId: uploadPhoto
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Image file (jpg, png, webp; max 5MB)
+      responses:
+        '200':
+          description: Upload successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      url:
+                        type: string
+                        example: "/api/public/photos/uploads/550e8400-e29b-41d4-a716-446655440000.jpg"
+                      key:
+                        type: string
+                        example: "uploads/550e8400-e29b-41d4-a716-446655440000.jpg"
+                      thumbnailUrl:
+                        type: string
+                        example: "/api/public/photos/uploads/550e8400-e29b-41d4-a716-446655440000.jpg"
+        '400':
+          description: Invalid file type or size
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/tokens:
+    get:
+      summary: List invite tokens
+      description: Retrieves all invite tokens with usage information
+      tags:
+        - Admin
+      operationId: listTokens
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Tokens retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InviteToken'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Generate new invite token
+      description: Creates a new 5-digit invite token
+      tags:
+        - Admin
+      operationId: createToken
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+                  description: Optional note about the token
+                  example: "For John Doe"
+      responses:
+        '201':
+          description: Token created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Token'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/tokens/{id}:
+    delete:
+      summary: Revoke invite token
+      description: |
+        Revokes an invite token. If the token was used by a user,
+        that user's access is also revoked (soft delete).
+      tags:
+        - Admin
+      operationId: revokeToken
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the token
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Token revoked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: "Token and user access revoked"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: jastip_session
+      description: Session cookie for authenticated users (7-day expiry)
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Admin password used as bearer token
+
+  schemas:
+    # Shared schemas
+    ItemCategory:
+      type: string
+      enum: [snack, skincare, makeup, stationery, gift, beverage, accessories]
+      description: Item category for filtering and organization
+      example: "snack"
+    
+    InfoNoteType:
+      type: string
+      enum: [amber, purple, blue, red]
+      description: Info note badge color type
+      example: "amber"
+    
+    InfoNote:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/InfoNoteType'
+        text:
+          type: string
+          description: Info note text content
+          example: "Limited stock available"
+      required:
+        - type
+        - text
+
+    # Public schemas
+    PublicConfig:
+      type: object
+      properties:
+        jastipStatus:
+          type: string
+          enum: [open, closed]
+          description: Current jastip status
+          example: "open"
+        countdownDays:
+          type: integer
+          nullable: true
+          description: Days until jastip closes (null if closed or no close date)
+          example: 5
+        remainingQuotaKg:
+          type: number
+          format: float
+          description: Remaining baggage quota in kilograms (1 decimal precision)
+          example: 15.5
+        totalQuotaKg:
+          type: number
+          format: float
+          description: Total baggage quota in kilograms
+          example: 20.0
+        estimatedArrivalDate:
+          type: string
+          nullable: true
+          description: Estimated arrival date in Indonesia
+          example: "6-10 May 2025"
+
+    PublicItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          example: "Pokemon Center Pikachu Plush"
+        description:
+          type: string
+          nullable: true
+          example: "Limited edition Pikachu plush from Pokemon Center Tokyo"
+        photos:
+          type: array
+          items:
+            type: string
+            format: uri
+          example: ["/api/public/photos/uploads/abc123.jpg"]
+        basePriceRp:
+          type: integer
+          description: Calculated base price in IDR (basePriceYen × exchangeRate)
+          example: 271250
+        sellingPriceRp:
+          type: integer
+          description: Selling price in Indonesian Rupiah (IDR)
+          example: 350000
+        weightGrams:
+          type: integer
+          description: Item weight in grams
+          example: 250
+        withoutBoxNote:
+          type: boolean
+          description: Show "tanpa box" (without box) info
+          example: false
+        isLimitedEdition:
+          type: boolean
+          description: Show "Limited Edition" badge
+          example: true
+        isPreorder:
+          type: boolean
+          description: Show "Pre-order" info
+          example: false
+        isFragile:
+          type: boolean
+          description: Show "Fragile" warning
+          example: true
+        category:
+          $ref: '#/components/schemas/ItemCategory'
+        infoNotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/InfoNote'
+          description: Array of info notes with colored badges
+          example: [{"type": "amber", "text": "Limited stock available"}, {"type": "blue", "text": "Official merchandise"}]
+        availableSlots:
+          type: integer
+          description: Number of remaining order slots (maxOrders - currentOrders)
+          example: 5
+        badge:
+          type: string
+          enum: [available, low_stock, full, new]
+          description: |
+            Item badge:
+            - `available`: Normal availability
+            - `low_stock`: 1-2 slots remaining
+            - `full`: No slots available
+            - `new`: Created within last 3 days
+          example: "new"
+        viewCount:
+          type: integer
+          description: Number of times the item has been viewed
+          example: 42
+
+    # Auth schemas
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        name:
+          type: string
+          example: "John Doe"
+        photoUrl:
+          type: string
+          format: uri
+          nullable: true
+          example: "https://lh3.googleusercontent.com/abc123"
+
+    TempOAuthSession:
+      type: object
+      properties:
+        googleId:
+          type: string
+          example: "123456789012345678901"
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        name:
+          type: string
+          example: "John Doe"
+        photoUrl:
+          type: string
+          format: uri
+          nullable: true
+          example: "https://example.com/avatar.jpg"
+
+    # Admin schemas
+    Settings:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "default"
+        exchangeRate:
+          type: number
+          description: JPY to IDR exchange rate
+          example: 108.5
+        defaultMarginPercent:
+          type: number
+          description: Default profit margin percentage
+          example: 30
+        totalBaggageQuotaGrams:
+          type: integer
+          description: Total baggage quota in grams
+          example: 20000
+        jastipStatus:
+          type: string
+          enum: [open, closed]
+          example: "open"
+        jastipCloseDate:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-05-01T00:00:00Z"
+        estimatedArrivalDate:
+          type: string
+          nullable: true
+          example: "6-10 May 2025"
+        adminPasswordHash:
+          type: string
+          description: Bcrypt hash of admin password
+          example: "$2a$10$..."
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2025-01-15T10:30:00Z"
+
+    UpdateSettingsPayload:
+      type: object
+      properties:
+        exchangeRate:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          example: 108.5
+        defaultMarginPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+          example: 30
+        totalBaggageQuotaGrams:
+          type: integer
+          minimum: 1
+          example: 20000
+        jastipStatus:
+          type: string
+          enum: [open, closed]
+          example: "open"
+        jastipCloseDate:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-05-01T00:00:00Z"
+        estimatedArrivalDate:
+          type: string
+          nullable: true
+          example: "6-10 May 2025"
+
+    Item:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          example: "Pokemon Center Pikachu Plush"
+        description:
+          type: string
+          nullable: true
+          example: "Limited edition Pikachu plush"
+        photos:
+          type: array
+          items:
+            type: string
+            format: uri
+          example: ["/api/public/photos/uploads/abc123.jpg"]
+        basePriceYen:
+          type: integer
+          description: Original price in Japanese Yen (admin enters)
+          example: 2500
+        basePriceRp:
+          type: integer
+          description: Calculated base price in IDR (basePriceYen × exchangeRate from settings)
+          example: 271250
+        sellingPriceRp:
+          type: integer
+          description: Selling price in Indonesian Rupiah (manual)
+          example: 350000
+        weightGrams:
+          type: integer
+          description: Item weight in grams
+          example: 250
+        withoutBoxNote:
+          type: boolean
+          example: false
+        isLimitedEdition:
+          type: boolean
+          example: true
+        isPreorder:
+          type: boolean
+          example: false
+        isFragile:
+          type: boolean
+          example: true
+        category:
+          $ref: '#/components/schemas/ItemCategory'
+        infoNotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/InfoNote'
+          description: Array of info notes with colored badges
+          example: [{"type": "amber", "text": "Limited stock available"}]
+        maxOrders:
+          type: integer
+          description: Maximum number of orders allowed
+          example: 10
+        currentOrders:
+          type: integer
+          description: Current number of orders placed
+          example: 5
+        isAvailable:
+          type: boolean
+          description: Soft delete flag
+          example: true
+        isDraft:
+          type: boolean
+          description: Draft mode flag (not visible to public)
+          example: false
+        viewCount:
+          type: integer
+          description: Number of views
+          example: 42
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-01-10T08:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2025-01-15T10:30:00Z"
+
+    CreateItemPayload:
+      type: object
+      required:
+        - name
+        - photos
+        - basePriceYen
+        - sellingPriceRp
+        - weightGrams
+        - maxOrders
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: "Pokemon Center Pikachu Plush"
+        description:
+          type: string
+          example: "Limited edition Pikachu plush from Pokemon Center"
+        photos:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uri
+          example: ["/api/public/photos/uploads/abc123.jpg"]
+        basePriceYen:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          description: Original price in Japanese Yen
+          example: 2500
+        sellingPriceRp:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          description: Selling price in Indonesian Rupiah (manual entry)
+          example: 350000
+        weightGrams:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          example: 250
+        withoutBoxNote:
+          type: boolean
+          default: false
+          example: false
+        isLimitedEdition:
+          type: boolean
+          default: false
+          example: true
+        isPreorder:
+          type: boolean
+          default: false
+          example: false
+        isFragile:
+          type: boolean
+          default: false
+          example: true
+        category:
+          $ref: '#/components/schemas/ItemCategory'
+        infoNotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/InfoNote'
+          description: Array of info notes with colored badges
+          example: [{"type": "amber", "text": "Limited stock available"}]
+        maxOrders:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          default: 10
+          example: 10
+        isDraft:
+          type: boolean
+          default: false
+          example: false
+
+    UpdateItemPayload:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: "Updated Item Name"
+        description:
+          type: string
+          example: "Updated description"
+        photos:
+          type: array
+          items:
+            type: string
+            format: uri
+          example: ["/api/public/photos/uploads/abc123.jpg"]
+        basePriceYen:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          description: Original price in Japanese Yen. When updated, basePriceRp is auto-calculated using current exchange rate.
+          example: 2500
+        sellingPriceRp:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          description: Selling price in Indonesian Rupiah
+          example: 350000
+        weightGrams:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          example: 250
+        withoutBoxNote:
+          type: boolean
+          example: false
+        isLimitedEdition:
+          type: boolean
+          example: true
+        isPreorder:
+          type: boolean
+          example: false
+        isFragile:
+          type: boolean
+          example: true
+        category:
+          $ref: '#/components/schemas/ItemCategory'
+        infoNotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/InfoNote'
+          description: Array of info notes with colored badges
+          example: [{"type": "purple", "text": "Preorder - ships in 2 weeks"}]
+        maxOrders:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          example: 10
+        isDraft:
+          type: boolean
+          example: false
+
+    Token:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        code:
+          type: string
+          description: 5-digit invite code
+          example: "12345"
+        createdBy:
+          type: string
+          example: "admin"
+        usedBy:
+          type: string
+          format: uuid
+          nullable: true
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        usedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-01-15T10:30:00Z"
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        isRevoked:
+          type: boolean
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-01-10T08:00:00Z"
+
+    InviteToken:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        code:
+          type: string
+          example: "12345"
+        createdBy:
+          type: string
+          example: "admin"
+        usedBy:
+          type: string
+          format: uuid
+          nullable: true
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        usedByName:
+          type: string
+          nullable: true
+          example: "John Doe"
+        usedByEmail:
+          type: string
+          format: email
+          nullable: true
+          example: "user@example.com"
+        usedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-01-15T10:30:00Z"
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        isRevoked:
+          type: boolean
+          example: false
+        userRevoked:
+          type: boolean
+          description: Whether the user who used this token has been revoked
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-01-10T08:00:00Z"
+
+    # Error schemas
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Invalid request"
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid input data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: "Invalid request body"
+
+    Unauthorized:
+      description: Unauthorized - missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: "Not authenticated"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: "Item not found"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: "Internal server error"

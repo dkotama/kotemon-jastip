@@ -1,0 +1,23 @@
+{
+  "name": "kotemon-jastip",
+  "version": "1.0.0",
+  "description": "Kotemon Jastip - Japan Trip Personal Shopper",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm run --parallel dev",
+    "dev:web": "pnpm --filter web dev",
+    "dev:api": "pnpm --filter api dev",
+    "build": "pnpm run --parallel build",
+    "build:web": "pnpm --filter web build",
+    "build:api": "pnpm --filter api build",
+    "deploy:api": "pnpm --filter api deploy",
+    "deploy:web": "pnpm --filter web deploy",
+    "db:migrate": "pnpm --filter api db:migrate",
+    "db:migrate:local": "pnpm --filter api db:migrate:local"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  },
+  "packageManager": "pnpm@8.0.0"
+}
