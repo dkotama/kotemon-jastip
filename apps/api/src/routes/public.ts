@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
-import { getSettings, getItems, getItemById, calculateRemainingQuota, incrementItemViewCount } from '../db/client.js'
-import type { PublicConfig, PublicItem } from '../types.ts'
+import { getSettings, getItems, getItemById, calculateRemainingQuota, incrementItemViewCount, getItemsForIndex } from '../db/client.js'
+import type { PublicConfig, PublicItem, IndexPageResponse, IndexPageItems } from '../types.ts'
 import type { Bindings } from '../index.js'
 
 // Helper to get content type from file extension
@@ -13,6 +13,45 @@ function getContentType(key: string): string {
     case 'webp': return 'image/webp'
     case 'gif': return 'image/gif'
     default: return 'application/octet-stream'
+  }
+}
+
+// Helper to transform Item to PublicItem with badge calculation
+function toPublicItem(item: Awaited<ReturnType<typeof getItemById>>): PublicItem | null {
+  if (!item) return null
+  
+  const now = new Date()
+  const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
+  const availableSlots = item.maxOrders - item.currentOrders
+  const createdAt = new Date(item.createdAt)
+
+  // Determine badge
+  let badge: PublicItem['badge'] = 'available'
+  if (availableSlots <= 0) {
+    badge = 'full'
+  } else if (availableSlots <= 2) {
+    badge = 'low_stock'
+  } else if (createdAt > threeDaysAgo) {
+    badge = 'new'
+  }
+
+  return {
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    photos: item.photos,
+    basePriceRp: item.basePriceRp,
+    sellingPriceRp: item.sellingPriceRp,
+    weightGrams: item.weightGrams,
+    withoutBoxNote: item.withoutBoxNote,
+    isLimitedEdition: item.isLimitedEdition,
+    isPreorder: item.isPreorder,
+    isFragile: item.isFragile,
+    category: item.category,
+    infoNotes: item.infoNotes,
+    availableSlots,
+    badge,
+    viewCount: item.viewCount,
   }
 }
 
@@ -203,6 +242,60 @@ publicRoutes.get('/photos/*', async (c) => {
   
   // Return the object body
   return c.body(object.body)
+})
+
+// GET /api/public/index - Landing page data (consolidated)
+publicRoutes.get('/index', async (c) => {
+  const db = c.env.DB
+  
+  // Get settings and items in parallel
+  const [settings, indexItems, remainingGrams] = await Promise.all([
+    getSettings(db),
+    getItemsForIndex(db),
+    calculateRemainingQuota(db),
+  ])
+  
+  if (!settings) {
+    return c.json({ success: false, error: 'Settings not found' }, 500)
+  }
+  
+  // Calculate countdown days
+  let countdownDays: number | null = null
+  if (settings.jastipStatus === 'open' && settings.jastipCloseDate) {
+    const closeDate = new Date(settings.jastipCloseDate)
+    const today = new Date()
+    const diffTime = closeDate.getTime() - today.getTime()
+    countdownDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    if (countdownDays < 0) countdownDays = 0
+  }
+  
+  // Build config
+  const config: PublicConfig = {
+    jastipStatus: settings.jastipStatus,
+    countdownDays,
+    remainingQuotaKg: Math.round(remainingGrams / 100) / 10,
+    totalQuotaKg: settings.totalBaggageQuotaGrams / 1000,
+    estimatedArrivalDate: settings.estimatedArrivalDate,
+  }
+  
+  // Transform items to public format
+  const items: IndexPageItems = {
+    latest: indexItems.latest.map(toPublicItem).filter((item): item is PublicItem => item !== null),
+    featured: indexItems.featured.map(toPublicItem).filter((item): item is PublicItem => item !== null),
+    popular: indexItems.popular.map(toPublicItem).filter((item): item is PublicItem => item !== null),
+    all: indexItems.all.map(toPublicItem).filter((item): item is PublicItem => item !== null),
+  }
+  
+  const response: IndexPageResponse = {
+    config,
+    items,
+    meta: {
+      totalItems: items.all.length,
+      lastUpdated: new Date().toISOString(),
+    },
+  }
+  
+  return c.json({ success: true, data: response })
 })
 
 export { publicRoutes }

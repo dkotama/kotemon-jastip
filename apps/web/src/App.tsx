@@ -114,7 +114,7 @@ function AppRoutes() {
     checkAuth();
   }, []);
 
-  // Fetch data from API when logged in
+  // Fetch data from API when logged in (using consolidated index endpoint)
   useEffect(() => {
     if (!user) {
       setLoading(false);
@@ -126,19 +126,17 @@ function AppRoutes() {
         setLoading(true);
         setError(null);
 
-        const [configData, itemsData] = await Promise.all([
-          publicApi.getConfig(),
-          publicApi.getItems(),
-        ]);
+        // Single API call for all landing page data
+        const indexData = await publicApi.getIndexPage();
 
-        const transformedItems: JastipItem[] = itemsData.items.map(item => ({
+        const transformedItems: JastipItem[] = indexData.items.all.map(item => ({
           id: item.id,
           name: item.name,
-          price: item.sellingPrice,
+          price: item.sellingPriceRp,
           weight: item.weightGrams,
           slots: item.availableSlots,
           status: item.badge,
-          category: 'all',
+          category: item.category || 'all',
           image: item.photos?.[0] ? getImageUrl(item.photos[0]) : '/images/item-1.jpg',
           description: item.description,
           views: item.viewCount,
@@ -151,18 +149,18 @@ function AppRoutes() {
           slotsAvailable: item.availableSlots,
           maxSlots: 100, // Default for public items
           images: item.photos?.map(getImageUrl) || [],
-          infoNotes: [],
+          infoNotes: item.infoNotes || [],
           createdAt: new Date(),
           updatedAt: new Date(),
         }));
 
         setItems(transformedItems);
         setStatus({
-          isOpen: configData.jastipStatus === 'open',
-          daysRemaining: configData.countdownDays || 0,
-          quotaUsed: Math.round((configData.totalQuotaKg - configData.remainingQuotaKg) * 10) / 10,
-          quotaTotal: configData.totalQuotaKg,
-          arrivalDate: configData.estimatedArrivalDate,
+          isOpen: indexData.config.jastipStatus === 'open',
+          daysRemaining: indexData.config.countdownDays || 0,
+          quotaUsed: Math.round((indexData.config.totalQuotaKg - indexData.config.remainingQuotaKg) * 10) / 10,
+          quotaTotal: indexData.config.totalQuotaKg,
+          arrivalDate: indexData.config.estimatedArrivalDate,
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load data');

@@ -83,6 +83,24 @@ export interface PublicConfig {
   estimatedArrivalDate: string | null;
 }
 
+// Index/Landing Page Items Grouping
+export interface IndexPageItems {
+  latest: PublicItem[];      // 8 newest items
+  featured: PublicItem[];    // Limited edition, preorder, or highlighted
+  popular: PublicItem[];     // 8 most viewed items
+  all: PublicItem[];         // All available items for search/filter
+}
+
+// Index/Landing Page Data Response
+export interface IndexPageResponse {
+  config: PublicConfig;
+  items: IndexPageItems;
+  meta: {
+    totalItems: number;
+    lastUpdated: string;
+  };
+}
+
 // API Response Wrapper
 export interface ApiResponse<T> {
   success: boolean;

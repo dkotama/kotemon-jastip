@@ -5,7 +5,7 @@ function getApiBaseUrl(): string {
   return isLocal ? 'http://localhost:8787' : 'https://jastip.dkotama.com';
 }
 
-import type { Item, PublicItem, User, InfoNote } from '@/types';
+import type { Item, PublicItem, User, InfoNote, JastipItem, ItemCategory } from '@/types';
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -104,6 +104,27 @@ export const publicApi = {
   incrementView: (id: string) => fetchApi<{ viewCount: number }>(`/api/public/items/${id}/view`, {
     method: 'POST',
   }),
+
+  // Get consolidated landing page data (replaces separate config + items calls)
+  getIndexPage: () => fetchApi<{
+    config: {
+      jastipStatus: 'open' | 'closed';
+      countdownDays: number | null;
+      remainingQuotaKg: number;
+      totalQuotaKg: number;
+      estimatedArrivalDate: string | null;
+    };
+    items: {
+      latest: PublicItem[];
+      featured: PublicItem[];
+      popular: PublicItem[];
+      all: PublicItem[];
+    };
+    meta: {
+      totalItems: number;
+      lastUpdated: string;
+    };
+  }>('/api/public/index'),
 };
 
 // Auth API

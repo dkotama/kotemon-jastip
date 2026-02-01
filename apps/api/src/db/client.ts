@@ -303,6 +303,39 @@ export async function calculateRemainingQuota(db: D1Database): Promise<number> {
   return settings.totalBaggageQuotaGrams - usedGrams
 }
 
+// Get items organized for index/landing page
+export interface IndexItemsResult {
+  latest: Item[];
+  featured: Item[];
+  popular: Item[];
+  all: Item[];
+}
+
+export async function getItemsForIndex(db: D1Database): Promise<IndexItemsResult> {
+  // Get all available items first
+  const allItems = await getItems(db, { onlyAvailable: true, onlyPublished: true, limit: 1000 })
+  
+  // Latest: 8 newest items
+  const latest = allItems.slice(0, 8)
+  
+  // Featured: limited edition or preorder items (up to 8)
+  const featured = allItems
+    .filter(item => item.isLimitedEdition || item.isPreorder)
+    .slice(0, 8)
+  
+  // Popular: sort by view_count descending (up to 8)
+  const popular = [...allItems]
+    .sort((a, b) => b.viewCount - a.viewCount)
+    .slice(0, 8)
+  
+  return {
+    latest,
+    featured,
+    popular,
+    all: allItems,
+  }
+}
+
 // ============================================
 // User queries
 // ============================================
