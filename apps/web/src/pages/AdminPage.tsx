@@ -35,13 +35,21 @@ const navItems: NavItem[] = [
     { id: 'settings', label: 'Pengaturan', icon: Settings },
 ];
 
-export function AdminPage() {
+interface AdminPageProps {
+    adminToken: string;
+}
+
+export function AdminPage({ adminToken }: AdminPageProps) {
     const navigate = useNavigate();
     const [currentPage, setCurrentPage] = useState<Page>('dashboard');
     const [itemId, setItemId] = useState<string | undefined>(undefined);
     const [sidebarOpen, setSidebarOpen] = useState(true);
 
     const handleNavigate = (page: string, id?: string) => {
+        if (page === 'orders') {
+            navigate('/admin/orders');
+            return;
+        }
         setCurrentPage(page as Page);
         setItemId(id);
         // Close sidebar on mobile when navigating
@@ -52,8 +60,9 @@ export function AdminPage() {
 
     const handleLogout = async () => {
         try {
-            // Clear admin token
+            // Clear admin token and remember me flag
             localStorage.removeItem('adminToken');
+            localStorage.removeItem('rememberAdminToken');
             navigate('/admin');
         } catch (err) {
             console.error('Logout failed:', err);
@@ -69,7 +78,7 @@ export function AdminPage() {
             case 'item-form':
                 return <ItemFormPage editItemId={itemId} onNavigate={handleNavigate} />;
             case 'tokens':
-                return <TokensPage onNavigate={handleNavigate} />;
+                return <TokensPage onNavigate={handleNavigate} adminToken={adminToken} />;
             case 'settings':
                 return <SettingsPage onNavigate={handleNavigate} />;
             default:

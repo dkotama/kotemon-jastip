@@ -20,13 +20,13 @@ export interface Item {
   basePriceYen: number;
   sellingPrice: number;         // IDR
   weightGrams: number;
-  
+
   // Info Box Flags
   withoutBoxNote: boolean;      // Show "tanpa box" info
   isLimitedEdition: boolean;    // Show "Limited Edition" badge
   isPreorder: boolean;          // Show "Pre-order" info
   isFragile: boolean;           // Show "Fragile" warning
-  
+
   maxOrders: number;
   currentOrders: number;
   isAvailable: boolean;         // Soft delete
@@ -83,7 +83,7 @@ export interface CreateItemPayload {
   isDraft?: boolean;
 }
 
-export interface UpdateItemPayload extends Partial<CreateItemPayload> {}
+export interface UpdateItemPayload extends Partial<CreateItemPayload> { }
 
 // Admin Update Settings Payload
 export interface UpdateSettingsPayload {
@@ -103,4 +103,75 @@ export interface LoginPayload {
 export interface LoginResponse {
   success: boolean;
   token?: string;
+}
+
+// Order Status
+export type OrderStatus = 'confirmed' | 'purchased' | 'shipped' | 'delivered' | 'cancelled' | 'waiting_payment';
+
+// Order Item
+export interface OrderItem {
+  id: string;
+  orderId: string;
+  itemId: string | null; // Null for custom items
+  name: string;
+  quantity: number;
+  priceYen: number;
+  priceRp: number;
+  weightGrams: number;
+  isCustom: boolean;
+  customUrl: string | null;
+  customNote: string | null;
+  customSource: string | null;
+  createdAt: string;
+}
+
+// Order
+export interface Order {
+  id: string;
+  userId: string;
+  status: OrderStatus;
+  totalPriceYen: number;
+  totalPriceRp: number;
+  totalWeightGrams: number;
+  notes: string | null;
+  items: OrderItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Public Order (for User/Admin list)
+export interface OrderSummary extends Order {
+  user?: {
+    name: string;
+    email: string;
+  };
+}
+
+// Create Order Payload
+export interface CreateOrderItemPayload {
+  itemId?: string; // Optional if custom
+  itemName?: string; // Required if custom
+  quantity: number;
+  isCustom?: boolean;
+  customUrl?: string;
+  customNote?: string;
+  customSource?: string;
+}
+
+export interface CreateOrderPayload {
+  items: CreateOrderItemPayload[];
+  notes?: string;
+}
+
+// Update Order Payload
+export interface UpdateOrderPayload {
+  status?: OrderStatus;
+  notes?: string;
+}
+
+// Update Order Item Payload (Admin)
+export interface UpdateOrderItemPayload {
+  priceYen?: number;
+  weightGrams?: number;
+  name?: string;
 }

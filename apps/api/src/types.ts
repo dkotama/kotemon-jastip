@@ -11,6 +11,7 @@ export interface Settings {
   estimatedArrivalDate: string | null; // e.g., "6-10 May 2025"
   adminPasswordHash: string;    // bcrypt hash
   updatedAt: string;
+  itemCategories: string[];     // Dynamic list of categories
 }
 
 // Info Note Type
@@ -21,8 +22,8 @@ export interface InfoNote {
   text: string;
 }
 
-// Item Category Type
-export type ItemCategory = 'snack' | 'skincare' | 'makeup' | 'stationery' | 'gift' | 'beverage' | 'accessories';
+// Item Category Type (Dynamic now)
+export type ItemCategory = string;
 
 // Item
 export interface Item {
@@ -34,17 +35,17 @@ export interface Item {
   basePriceRp: number;          // Calculated from exchange rate (JPY × exchangeRate)
   sellingPriceRp: number;       // Selling price in IDR (manual)
   weightGrams: number;
-  
+
   // Info Box Flags
   withoutBoxNote: boolean;      // Show "tanpa box" info
   isLimitedEdition: boolean;    // Show "Limited Edition" badge
   isPreorder: boolean;          // Show "Pre-order" info
   isFragile: boolean;           // Show "Fragile" warning
-  
+
   // Category and Info Notes
   category: ItemCategory | null;
   infoNotes: InfoNote[];
-  
+
   maxOrders: number;
   currentOrders: number;
   isAvailable: boolean;         // Soft delete
@@ -126,7 +127,7 @@ export interface CreateItemPayload {
   isDraft?: boolean;
 }
 
-export interface UpdateItemPayload extends Partial<CreateItemPayload> {}
+export interface UpdateItemPayload extends Partial<CreateItemPayload> { }
 
 // Admin Update Settings Payload
 export interface UpdateSettingsPayload {
@@ -136,6 +137,7 @@ export interface UpdateSettingsPayload {
   jastipStatus?: 'open' | 'closed';
   jastipCloseDate?: string | null;
   estimatedArrivalDate?: string | null;
+  itemCategories?: string[];
 }
 
 // Admin Login

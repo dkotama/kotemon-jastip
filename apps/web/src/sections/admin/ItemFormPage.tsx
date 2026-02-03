@@ -36,16 +36,6 @@ interface ItemFormPageProps {
   editItemId?: string;
 }
 
-const CATEGORIES: { id: ItemCategory; label: string }[] = [
-  { id: 'snack', label: 'Snack' },
-  { id: 'skincare', label: 'Skincare' },
-  { id: 'makeup', label: 'Makeup' },
-  { id: 'stationery', label: 'Stationery' },
-  { id: 'gift', label: 'Gift' },
-  { id: 'beverage', label: 'Beverage' },
-  { id: 'accessories', label: 'Accessories' },
-];
-
 const NOTE_TYPES: { id: InfoNoteType; label: string; color: string }[] = [
   { id: 'amber', label: 'Amber (Warning)', color: 'bg-amber-100 text-amber-700' },
   { id: 'purple', label: 'Purple (Preorder)', color: 'bg-purple-100 text-purple-700' },
@@ -57,6 +47,32 @@ export function ItemFormPage({ onNavigate, editItemId }: ItemFormPageProps) {
   const isEditing = !!editItemId;
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
+
+  // Dynamic Categories
+  const [categories, setCategories] = useState<string[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  const loadCategories = async () => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      if (!token) return;
+      const settings = await adminApi.getSettings(token);
+      setCategories(settings.itemCategories || []);
+      // If default category is not in list (e.g. empty), set it to first available or empty
+      if (settings.itemCategories.length > 0 && !formData.category) {
+        setFormData(prev => ({ ...prev, category: settings.itemCategories[0] }));
+      }
+    } catch (err) {
+      console.error('Failed to load categories', err);
+      toast.error('Failed to load categories');
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
 
   // Settings for Base Price Calculation (Fetched from backend normally, mocking or fetching here?)
   // Ideally fetch settings. For now we assume a default exchange rate if we wanted to calculate on client,
@@ -71,7 +87,7 @@ export function ItemFormPage({ onNavigate, editItemId }: ItemFormPageProps) {
     sellingPriceRp: '',
     weightGrams: '',
     maxOrders: '10',
-    category: 'snack' as ItemCategory,
+    category: '' as ItemCategory,
     isDraft: false,
 
     // Flags
@@ -330,9 +346,9 @@ export function ItemFormPage({ onNavigate, editItemId }: ItemFormPageProps) {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {CATEGORIES.map(cat => (
-                          <SelectItem key={cat.id} value={cat.id}>
-                            {cat.label}
+                        {categories.map(cat => (
+                          <SelectItem key={cat} value={cat}>
+                            <span className="capitalize">{cat}</span>
                           </SelectItem>
                         ))}
                       </SelectContent>

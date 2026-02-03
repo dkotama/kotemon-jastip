@@ -1,6 +1,6 @@
 // Types matching backend API
 export type ItemBadge = 'new' | 'low_stock' | 'full' | 'available';
-export type ItemCategory = 'snack' | 'skincare' | 'makeup' | 'stationery' | 'gift' | 'beverage' | 'accessories';
+export type ItemCategory = string;
 
 export interface CategoryOption {
   id: ItemCategory;
@@ -35,6 +35,7 @@ export interface JastipStatus {
   quotaUsed: number;
   quotaTotal: number;
   arrivalDate: string;
+  closeDate?: string | null;  // For date validation display
 }
 
 // Admin Item Schema (from openapi.yaml)
@@ -109,11 +110,29 @@ export interface Token {
 }
 
 // Settings Types
+// Note: These field names must match the backend API (apps/api/src/routes/admin.ts)
 export interface JastipSettings {
   isOpen: boolean;
   totalQuota: number;
-  arrivalDate: Date | null;
-  countdownTarget: Date | null;
+  // Use backend field names directly for consistency
+  jastipCloseDate: Date | string | null;      // Deadline for orders (tutup)
+  estimatedArrivalDate: Date | string | null; // When items arrive in Indonesia (estimasi)
+  exchangeRate: number;
+  defaultMarginPercent: number;
+  itemCategories: string[];
+  // Aliases for frontend compatibility (deprecated, use jastipCloseDate and estimatedArrivalDate)
+  arrivalDate?: Date | string | null;
+  countdownTarget?: Date | string | null;
+}
+
+export interface UpdateSettingsPayload {
+  exchangeRate?: number;
+  defaultMarginPercent?: number;
+  totalBaggageQuotaGrams?: number;  // Backend uses grams
+  jastipStatus?: 'open' | 'closed';
+  jastipCloseDate?: Date | string | null;
+  estimatedArrivalDate?: Date | string | null;
+  itemCategories?: string[];
 }
 
 // Dashboard Stats
@@ -139,6 +158,56 @@ export interface Activity {
 
 // Alias for compatibility if needed
 export type JastipItem = Item;
+
+// Order Status
+export type OrderStatus = 'confirmed' | 'purchased' | 'shipped' | 'delivered' | 'cancelled' | 'waiting_payment';
+
+// Order Item
+export interface OrderItem {
+  id: string;
+  orderId: string;
+  itemId: string | null; // Null for custom items
+  name: string;
+  quantity: number;
+  priceYen: number;
+  priceRp: number;
+  weightGrams: number;
+  isCustom: boolean;
+  customUrl: string | null;
+  customNote: string | null;
+  customSource: string | null;
+  createdAt: string;
+}
+
+// Order
+export interface Order {
+  id: string;
+  userId: string;
+  status: OrderStatus;
+  totalPriceYen: number;
+  totalPriceRp: number;
+  totalWeightGrams: number;
+  notes: string | null;
+  items: OrderItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Create Order Payload
+export interface CreateOrderItemPayload {
+  itemId?: string; // Optional if custom
+  itemName?: string; // Required if custom
+  quantity: number;
+  isCustom?: boolean;
+  customUrl?: string;
+  customNote?: string;
+  customSource?: string;
+}
+
+export interface CreateOrderPayload {
+  items: CreateOrderItemPayload[];
+  notes?: string;
+}
 
 
 

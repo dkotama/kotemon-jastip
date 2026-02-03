@@ -46,15 +46,7 @@ interface ItemListPageProps {
   onNavigate: (page: string, id?: string) => void;
 }
 
-const categoryLabels: Record<string, string> = {
-  snack: 'Snack',
-  skincare: 'Skincare',
-  makeup: 'Makeup',
-  stationery: 'Stationery',
-  gift: 'Gift',
-  beverage: 'Beverage',
-  accessories: 'Accessories',
-};
+
 
 export function ItemListPage({ onNavigate }: ItemListPageProps) {
   const [items, setItems] = useState<Item[]>([]);
@@ -263,7 +255,7 @@ export function ItemListPage({ onNavigate }: ItemListPageProps) {
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-xs capitalize">
-                            {categoryLabels[item.category] || item.category}
+                            {item.category}
                           </Badge>
                         </TableCell>
                         <TableCell>

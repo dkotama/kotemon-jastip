@@ -5,7 +5,7 @@ function getApiBaseUrl(): string {
   return isLocal ? 'http://localhost:8787' : 'https://jastip.dkotama.com';
 }
 
-import type { Item, PublicItem, User, InfoNote, JastipItem, ItemCategory } from '@/types';
+import type { Item, PublicItem, User, InfoNote, JastipItem, ItemCategory, JastipSettings, UpdateSettingsPayload, CreateOrderPayload, Order } from '@/types';
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -225,4 +225,87 @@ export const adminApi = {
 
     return result.data as { url: string; key: string; thumbnailUrl: string };
   },
+
+  // Token management
+  getTokens: (token: string) => fetchApi<{
+    id: string;
+    code: string;
+    createdBy: string;
+    usedBy: string | null;
+    usedByName: string | null;
+    usedByEmail: string | null;
+    usedAt: string | null;
+    expiresAt: string | null;
+    isRevoked: boolean;
+    userRevoked: boolean;
+    createdAt: string;
+  }[]>('/api/admin/tokens', {
+    headers: { Authorization: `Bearer ${token}` },
+  }),
+
+  generateToken: (token: string) => fetchApi<{
+    id: string;
+    code: string;
+    createdBy: string;
+    createdAt: string;
+  }>('/api/admin/tokens', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({}),
+  }),
+
+  revokeToken: (token: string, tokenId: string) => fetchApi<{ message: string }>(`/api/admin/tokens/${tokenId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  }),
+
+  // Settings management
+  getSettings: (token: string) => fetchApi<JastipSettings>('/api/admin/settings', {
+    headers: { Authorization: `Bearer ${token}` },
+  }),
+
+  updateSettings: (token: string, settings: UpdateSettingsPayload) => fetchApi<JastipSettings>('/api/admin/settings', {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(settings),
+  }),
+
+  // Admin Order Management
+  getOrders: (token: string, status?: string) => {
+    const params = status ? `?status=${status}` : '';
+    return fetchApi<Order[]>(`/api/orders/admin/all${params}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  },
+
+  getOrder: (token: string, id: string) => fetchApi<Order>(`/api/orders/admin/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  }),
+
+  updateOrderStatus: (token: string, id: string, status: string) => fetchApi<{ message: string }>(`/api/orders/${id}/status`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ status }),
+  }),
+
+  updateOrderDetails: (token: string, id: string, payload: any) => fetchApi<{ message: string }>(`/api/orders/${id}/details`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  }),
+};
+
+// Orders API
+export const ordersApi = {
+  createOrder: (payload: CreateOrderPayload) => fetchApi<{ id: string }>('/api/orders', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }),
+
+  getOrders: (status?: string) => {
+    const params = status ? `?status=${status}` : '';
+    return fetchApi<Order[]>(`/api/orders${params}`);
+  },
+
+  getOrder: (id: string) => fetchApi<Order>(`/api/orders/${id}`),
 };

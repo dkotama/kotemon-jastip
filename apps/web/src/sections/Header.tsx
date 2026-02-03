@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Search, User, LogOut, Settings, ChevronDown } from 'lucide-react';
+import { Search, User, LogOut, Settings, ChevronDown, ShoppingBag } from 'lucide-react';
+import { useCartStore } from '@/stores/useCartStore';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -21,6 +22,7 @@ interface HeaderProps {
 export function Header({ user, onSearch, onLogout }: HeaderProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const { items, toggleCart } = useCartStore();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -39,8 +41,8 @@ export function Header({ user, onSearch, onLogout }: HeaderProps) {
   return (
     <header
       className={`sticky top-0 z-50 w-full transition-all duration-200 ${isScrolled
-          ? 'bg-background/95 backdrop-blur-md shadow-sm'
-          : 'bg-background'
+        ? 'bg-background/95 backdrop-blur-md shadow-sm'
+        : 'bg-background'
         }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -69,46 +71,65 @@ export function Header({ user, onSearch, onLogout }: HeaderProps) {
             </div>
           </div>
 
-          {/* User Menu */}
-          {user ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 p-1.5 rounded-full hover:bg-accent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20">
-                  <Avatar className="h-8 w-8 border-2 border-white shadow-sm">
-                    <AvatarImage src={user.avatar || user.photoUrl} alt={user.name} />
-                    <AvatarFallback className="bg-primary text-white text-sm font-medium">
-                      {user.name.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground hidden sm:block" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 mt-2">
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium text-foreground">{user.name}</p>
-                    <p className="text-xs text-muted-foreground">{user.email}</p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem className="cursor-pointer">
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Profil</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="cursor-pointer">
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Pengaturan</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600" onClick={onLogout}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Keluar</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <div className="w-8" /> // Spacer when no user
-          )}
+
+          {/* Cart & User Menu */}
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Cart Button */}
+            {user && (
+              <button
+                onClick={() => toggleCart(true)}
+                className="relative p-2 text-gray-500 hover:text-blue-600 transition-colors focus:outline-none"
+              >
+                <ShoppingBag className="h-6 w-6" />
+                {items.length > 0 && (
+                  <span className="absolute top-1 right-0 h-4 w-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border border-white">
+                    {items.length}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* User Menu */}
+            {user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center gap-2 p-1.5 rounded-full hover:bg-accent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20">
+                    <Avatar className="h-8 w-8 border-2 border-white shadow-sm">
+                      <AvatarImage src={user.avatar || user.photoUrl} alt={user.name} />
+                      <AvatarFallback className="bg-primary text-white text-sm font-medium">
+                        {user.name.charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground hidden sm:block" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 mt-2">
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium text-foreground">{user.name}</p>
+                      <p className="text-xs text-muted-foreground">{user.email}</p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="cursor-pointer">
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profil</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="cursor-pointer">
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Pengaturan</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600" onClick={onLogout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Keluar</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div className="w-8" /> // Spacer when no user
+            )}
+          </div>
         </div>
       </div>
     </header>

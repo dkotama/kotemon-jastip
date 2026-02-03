@@ -4,16 +4,18 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { adminApi } from '@/api/client';
 
 interface AdminLoginPageProps {
-  onLogin?: (token: string) => void;
+  onLogin?: (token: string, rememberMe: boolean) => void;
   error?: string;
 }
 
 export function AdminLoginPage({ onLogin, error: initialError }: AdminLoginPageProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialError || null);
 
@@ -30,7 +32,7 @@ export function AdminLoginPage({ onLogin, error: initialError }: AdminLoginPageP
 
     try {
       const result = await adminApi.login(password);
-      onLogin?.(result.token);
+      onLogin?.(result.token, rememberMe);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Login gagal';
       setError(errorMsg);
@@ -86,6 +88,20 @@ export function AdminLoginPage({ onLogin, error: initialError }: AdminLoginPageP
               >
                 {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
               </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="rememberMe"
+                checked={rememberMe}
+                onCheckedChange={(checked) => setRememberMe(checked === true)}
+              />
+              <label
+                htmlFor="rememberMe"
+                className="text-sm text-muted-foreground cursor-pointer select-none"
+              >
+                Ingat saya
+              </label>
             </div>
 
             <Button

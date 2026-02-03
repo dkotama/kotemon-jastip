@@ -9,6 +9,12 @@ import { LoginPage } from '@/pages/LoginPage';
 import { TokenVerifyPage } from '@/pages/TokenVerifyPage';
 import { AdminLoginPage } from '@/pages/AdminLoginPage';
 import { AdminPage } from '@/pages/AdminPage';
+import { AdminOrderListPage } from '@/sections/admin/order/AdminOrderListPage';
+import { AdminOrderDetailPage } from '@/sections/admin/order/AdminOrderDetailPage';
+import { CartDrawer } from '@/components/CartDrawer';
+import { CustomItemModal } from '@/sections/CustomItemModal';
+import { CustomOrderBanner } from '@/sections/CustomOrderBanner';
+import { OrderListPage } from '@/sections/order/OrderListPage';
 import { publicApi, authApi, getImageUrl } from '@/api/client';
 import type { JastipItem, JastipStatus, User, ItemCategory } from '@/types';
 
@@ -50,7 +56,14 @@ function AppRoutes() {
   const navigate = useNavigate();
 
   const [user, setUser] = useState<User | null>(null);
-  const [adminToken, setAdminToken] = useState<string | null>(null);
+  // Check if admin was remembered on previous session
+  const [adminToken, setAdminToken] = useState<string | null>(() => {
+    const remembered = localStorage.getItem('rememberAdminToken');
+    if (remembered === 'true') {
+      return localStorage.getItem('adminToken');
+    }
+    return null;
+  });
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
   // Verification flow state
@@ -77,6 +90,13 @@ function AppRoutes() {
         const urlParams = new URLSearchParams(window.location.search);
         const urlTempToken = urlParams.get('tempToken');
         const oauthError = urlParams.get('error');
+        const inviteCode = urlParams.get('invite');
+
+        // Store invite code in sessionStorage for use after OAuth redirect
+        if (inviteCode) {
+          sessionStorage.setItem('pendingInviteCode', inviteCode);
+          window.history.replaceState({}, '', window.location.pathname);
+        }
 
         if (oauthError) {
           setError(`Login failed: ${oauthError}`);
@@ -132,26 +152,38 @@ function AppRoutes() {
         const transformedItems: JastipItem[] = indexData.items.all.map(item => ({
           id: item.id,
           name: item.name,
-          price: item.sellingPriceRp,
-          weight: item.weightGrams,
-          slots: item.availableSlots,
-          status: item.badge,
-          category: item.category || 'all',
-          image: item.photos?.[0] ? getImageUrl(item.photos[0]) : '/images/item-1.jpg',
           description: item.description,
-          views: item.viewCount,
-          photos: item.photos?.map(getImageUrl) || [],
+          basePriceYen: 0, // Public view doesn't see this
+          basePriceRp: item.basePriceRp,
+          sellingPriceRp: item.sellingPriceRp,
+          price: item.sellingPriceRp, // Alias
+          weight: item.weightGrams, // Alias
+          weightGrams: item.weightGrams,
           withoutBoxNote: item.withoutBoxNote,
           isLimitedEdition: item.isLimitedEdition,
           isPreorder: item.isPreorder,
           isFragile: item.isFragile,
-          // Admin compatibility
-          slotsAvailable: item.availableSlots,
-          maxSlots: 100, // Default for public items
+          category: item.category,
+          infoNotes: item.infoNotes,
+          maxOrders: 100,
+          currentOrders: 0,
+          availableSlots: item.availableSlots,
+          status: item.badge, // Alias? computed?
+          badge: item.badge, // Actual prop
+          viewCount: item.viewCount,
+          photos: item.photos,
+
+          // Frontend compatibility aliases
+          image: item.photos?.[0] ? getImageUrl(item.photos[0]) : '/images/item-1.jpg',
           images: item.photos?.map(getImageUrl) || [],
-          infoNotes: item.infoNotes || [],
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          slots: item.availableSlots,
+          slotsAvailable: item.availableSlots,
+          views: item.viewCount,
+
+          isAvailable: true,
+          isDraft: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         }));
 
         setItems(transformedItems);
@@ -160,7 +192,9 @@ function AppRoutes() {
           daysRemaining: indexData.config.countdownDays || 0,
           quotaUsed: Math.round((indexData.config.totalQuotaKg - indexData.config.remainingQuotaKg) * 10) / 10,
           quotaTotal: indexData.config.totalQuotaKg,
-          arrivalDate: indexData.config.estimatedArrivalDate,
+          arrivalDate: indexData.config.estimatedArrivalDate || 'Belum diatur',
+          // Add close date for validation display
+          closeDate: indexData.config.jastipCloseDate,
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -194,9 +228,16 @@ function AppRoutes() {
     }
   };
 
-  const handleAdminLogin = (token: string) => {
+  const handleAdminLogin = (token: string, rememberMe: boolean) => {
     setAdminToken(token);
-    localStorage.setItem('adminToken', token);
+    if (rememberMe) {
+      localStorage.setItem('adminToken', token);
+      localStorage.setItem('rememberAdminToken', 'true');
+    } else {
+      // Session-only: store in memory state, remove from localStorage
+      localStorage.removeItem('adminToken');
+      localStorage.removeItem('rememberAdminToken');
+    }
     navigate('/admin/dashboard');
   };
 
@@ -254,6 +295,7 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public Routes */}
+      <Route path="/orders" element={user ? <OrderListPage /> : <Navigate to="/" />} />
       <Route path="/" element={
         user ? (
           <div className="min-h-screen bg-white">
@@ -263,6 +305,7 @@ function AppRoutes() {
               onLogout={handleLogout}
             />
             <StatusBanner status={status} />
+            <CustomOrderBanner />
             <CategoryFilter
               selectedCategory={selectedCategory}
               onCategoryChange={setSelectedCategory}
@@ -279,6 +322,8 @@ function AppRoutes() {
               isOpen={isModalOpen}
               onClose={handleCloseModal}
             />
+            <CartDrawer />
+            <CustomItemModal />
           </div>
         ) : (
           <LoginPage onLogin={handleLogin} error={error || undefined} />
@@ -290,12 +335,18 @@ function AppRoutes() {
         adminToken ? <Navigate to="/admin/dashboard" /> : <AdminLoginPage onLogin={handleAdminLogin} />
       } />
       <Route path="/admin/dashboard" element={
-        adminToken ? <AdminPage /> : <Navigate to="/admin" />
+        adminToken ? <AdminPage adminToken={adminToken} /> : <Navigate to="/admin" />
+      } />
+      <Route path="/admin/orders" element={
+        adminToken ? <AdminOrderListPage adminToken={adminToken} /> : <Navigate to="/admin" />
+      } />
+      <Route path="/admin/orders/:id" element={
+        adminToken ? <AdminOrderDetailPage adminToken={adminToken} /> : <Navigate to="/admin" />
       } />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" />} />
-    </Routes>
+    </Routes >
   );
 }
 

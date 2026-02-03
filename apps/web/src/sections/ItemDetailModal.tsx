@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Eye, Weight, Package, Clock, Sparkles, Box, AlertTriangle, Calendar, X } from 'lucide-react';
+import { Eye, Weight, Package, Clock, Sparkles, Box, AlertTriangle, Calendar, X, PackageX } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -68,19 +68,35 @@ export function ItemDetailModal({ item, isOpen, onClose }: ItemDetailModalProps)
   const isFull = item.slots <= 0;
   const slotsPercentage = isFull ? 0 : Math.min(100, (item.slots / (item.slots + 5)) * 100);
 
-  // Build info notes from backend flags
+  // Build info notes from backend flags and infoNotes array
   const infoNotes: { type: 'amber' | 'purple' | 'blue' | 'red'; text: string }[] = [];
-  if (item.isPreorder) {
-    infoNotes.push({ type: 'amber', text: 'Pre-order: Estimasi pengiriman lebih lama' });
-  }
-  if (item.isFragile) {
-    infoNotes.push({ type: 'red', text: 'Barang mudah pecah - akan dikemas extra aman' });
+  
+  // Add automatic notes from boolean flags (matching design spec colors)
+  if (item.withoutBoxNote) {
+    infoNotes.push({ type: 'amber', text: 'Dikirim tanpa box/dus - Untuk menghindari pajak bea cukai' });
   }
   if (item.isLimitedEdition) {
-    infoNotes.push({ type: 'purple', text: 'Limited Edition - Stok terbatas!' });
+    infoNotes.push({ type: 'purple', text: 'Limited Edition - Stok terbatas, siapa cepat dia dapat!' });
   }
-  if (item.withoutBoxNote) {
-    infoNotes.push({ type: 'blue', text: item.withoutBoxNote });
+  if (item.isPreorder) {
+    infoNotes.push({ type: 'blue', text: 'Pre-order - Estimasi pengiriman lebih lama' });
+  }
+  if (item.isFragile) {
+    infoNotes.push({ type: 'red', text: 'Fragile - Barang mudah pecah, akan dikemas extra aman' });
+  }
+  
+  // Add custom info notes from backend (if any)
+  if (item.infoNotes && item.infoNotes.length > 0) {
+    item.infoNotes.forEach(note => {
+      // Avoid duplicates by checking if similar text already exists
+      const isDuplicate = infoNotes.some(existing => 
+        existing.text.toLowerCase().includes(note.text.toLowerCase()) ||
+        note.text.toLowerCase().includes(existing.text.toLowerCase())
+      );
+      if (!isDuplicate) {
+        infoNotes.push({ type: note.type, text: note.text });
+      }
+    });
   }
 
   return (
@@ -224,9 +240,9 @@ export function ItemDetailModal({ item, isOpen, onClose }: ItemDetailModalProps)
                                 'bg-red-50 text-red-800 border-red-200'
                             }`}
                         >
-                          {note.type === 'amber' && <Calendar className="h-4 w-4 flex-shrink-0 mt-0.5" />}
+                          {note.type === 'amber' && <PackageX className="h-4 w-4 flex-shrink-0 mt-0.5" />}
                           {note.type === 'purple' && <Sparkles className="h-4 w-4 flex-shrink-0 mt-0.5" />}
-                          {note.type === 'blue' && <Box className="h-4 w-4 flex-shrink-0 mt-0.5" />}
+                          {note.type === 'blue' && <Clock className="h-4 w-4 flex-shrink-0 mt-0.5" />}
                           {note.type === 'red' && <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />}
                           <span>{note.text}</span>
                         </div>

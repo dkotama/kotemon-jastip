@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { useStore } from '@/hooks/useStore';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,56 +35,123 @@ import {
   Search,
   TicketCheck,
   TicketX,
-  Tickets
+  Tickets,
+  Loader2
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { Token } from '@/types';
+import { adminApi } from '@/api/client';
+
+// Token type from API
+interface ApiToken {
+  id: string;
+  code: string;
+  createdBy: string;
+  usedBy: string | null;
+  usedByName: string | null;
+  usedByEmail: string | null;
+  usedAt: string | null;
+  expiresAt: string | null;
+  isRevoked: boolean;
+  userRevoked: boolean;
+  createdAt: string;
+}
 
 interface TokensPageProps {
   onNavigate: (page: string, id?: string) => void;
+  adminToken: string;
 }
 
-export function TokensPage({ }: TokensPageProps) {
-  const { tokens, generateToken, deleteToken, revokeToken } = useStore();
+export function TokensPage({ adminToken }: TokensPageProps) {
+  const [tokens, setTokens] = useState<ApiToken[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [tokenToDelete, setTokenToDelete] = useState<Token | null>(null);
-  const [tokenToRevoke, setTokenToRevoke] = useState<Token | null>(null);
+  const [tokenToDelete, setTokenToDelete] = useState<ApiToken | null>(null);
+  const [tokenToRevoke, setTokenToRevoke] = useState<ApiToken | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  const availableTokens = tokens.filter(t => !t.isUsed);
-  const usedTokens = tokens.filter(t => t.isUsed);
+  // Fetch tokens on mount
+  useEffect(() => {
+    fetchTokens();
+  }, [adminToken]);
+
+  const fetchTokens = async () => {
+    try {
+      setLoading(true);
+      const data = await adminApi.getTokens(adminToken);
+      setTokens(data);
+    } catch (err) {
+      toast.error('Failed to load tokens');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const availableTokens = tokens.filter(t => !t.usedBy && !t.isRevoked);
+  const usedTokens = tokens.filter(t => t.usedBy !== null);
 
   const filteredUsedTokens = usedTokens.filter(token =>
     token.code.includes(searchQuery) ||
-    token.usedBy?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    token.usedBy?.email.toLowerCase().includes(searchQuery.toLowerCase())
+    token.usedByName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    token.usedByEmail?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleCopyToken = (code: string) => {
-    navigator.clipboard.writeText(code);
-    toast.success('Token copied to clipboard!');
+    const inviteLink = `${window.location.origin}/?invite=${code}`;
+    navigator.clipboard.writeText(inviteLink);
+    toast.success('Invite link copied to clipboard!');
   };
 
-  const handleGenerateToken = () => {
-    const newToken = generateToken();
-    toast.success(`Token ${newToken.code} generated!`);
+  const handleGenerateToken = async () => {
+    try {
+      setIsGenerating(true);
+      const newToken = await adminApi.generateToken(adminToken);
+      toast.success(`Token ${newToken.code} generated!`);
+      await fetchTokens(); // Refresh list
+    } catch (err) {
+      toast.error('Failed to generate token');
+      console.error(err);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  const handleDeleteToken = () => {
+  const handleDeleteToken = async () => {
     if (tokenToDelete) {
-      deleteToken(tokenToDelete.id);
-      setTokenToDelete(null);
-      toast.success('Token deleted successfully');
+      try {
+        await adminApi.revokeToken(adminToken, tokenToDelete.id);
+        setTokenToDelete(null);
+        toast.success('Token deleted successfully');
+        await fetchTokens(); // Refresh list
+      } catch (err) {
+        toast.error('Failed to delete token');
+        console.error(err);
+      }
     }
   };
 
-  const handleRevokeToken = () => {
+  const handleRevokeToken = async () => {
     if (tokenToRevoke) {
-      revokeToken(tokenToRevoke.id);
-      setTokenToRevoke(null);
-      toast.success('Token access revoked');
+      try {
+        await adminApi.revokeToken(adminToken, tokenToRevoke.id);
+        setTokenToRevoke(null);
+        toast.success('Token access revoked');
+        await fetchTokens(); // Refresh list
+      } catch (err) {
+        toast.error('Failed to revoke token');
+        console.error(err);
+      }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -97,9 +163,14 @@ export function TokensPage({ }: TokensPageProps) {
         </div>
         <Button
           onClick={handleGenerateToken}
+          disabled={isGenerating}
           className="bg-gradient-to-r from-blue-600 to-blue-500 hover:opacity-90 text-white"
         >
-          <Plus className="h-4 w-4 mr-2" />
+          {isGenerating ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4 mr-2" />
+          )}
           Generate Token
         </Button>
       </div>
@@ -165,6 +236,7 @@ export function TokensPage({ }: TokensPageProps) {
               <p className="text-gray-500 mb-4">No available tokens</p>
               <Button
                 onClick={handleGenerateToken}
+                disabled={isGenerating}
                 variant="outline"
               >
                 <Plus className="h-4 w-4 mr-2" />
@@ -206,7 +278,7 @@ export function TokensPage({ }: TokensPageProps) {
 
                     <div className="flex items-center justify-center gap-1 text-xs text-gray-500 mb-4">
                       <Clock className="h-3 w-3" />
-                      Created {formatDate(token.createdAt)}
+                      Created {formatDate(new Date(token.createdAt))}
                     </div>
 
                     {/* Actions */}
@@ -218,7 +290,7 @@ export function TokensPage({ }: TokensPageProps) {
                         onClick={() => handleCopyToken(token.code)}
                       >
                         <Copy className="h-3.5 w-3.5 mr-1.5" />
-                        Copy
+                        Copy Link
                       </Button>
                       <Button
                         variant="outline"
@@ -283,43 +355,28 @@ export function TokensPage({ }: TokensPageProps) {
                   filteredUsedTokens.map((token) => (
                     <TableRow key={token.id} className="hover:bg-gray-50/50">
                       <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          {token.code.split('').map((digit, i) => (
-                            <div
-                              key={i}
-                              className="w-6 h-7 bg-gray-800 rounded flex items-center justify-center"
-                            >
-                              <span className="text-sm font-mono font-bold text-white">{digit}</span>
-                            </div>
-                          ))}
+                        <div className="font-mono font-medium text-gray-700 bg-gray-100 px-2 py-1 rounded inline-block">
+                          {token.code}
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          {token.usedBy?.avatar ? (
-                            <img
-                              src={token.usedBy.avatar}
-                              alt={token.usedBy.name}
-                              className="h-8 w-8 rounded-full"
-                            />
-                          ) : (
-                            <div className="h-8 w-8 rounded-full bg-purple-100 flex items-center justify-center">
-                              <User className="h-4 w-4 text-purple-500" />
-                            </div>
-                          )}
-                          <span className="font-medium">{token.usedBy?.name}</span>
+                          <div className="h-8 w-8 rounded-full bg-purple-100 flex items-center justify-center">
+                            <User className="h-4 w-4 text-purple-500" />
+                          </div>
+                          <span className="font-medium">{token.usedByName || 'Unknown'}</span>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2 text-gray-500">
                           <Mail className="h-3.5 w-3.5" />
-                          <span className="text-sm">{token.usedBy?.email}</span>
+                          <span className="text-sm">{token.usedByEmail || '-'}</span>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2 text-gray-500">
                           <Calendar className="h-3.5 w-3.5" />
-                          <span className="text-sm">{token.usedAt ? formatDate(token.usedAt) : '-'}</span>
+                          <span className="text-sm">{token.usedAt ? formatDate(new Date(token.usedAt)) : '-'}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
@@ -328,9 +385,10 @@ export function TokensPage({ }: TokensPageProps) {
                           size="sm"
                           className="text-red-500 hover:bg-red-50 hover:text-red-600"
                           onClick={() => setTokenToRevoke(token)}
+                          disabled={token.userRevoked}
                         >
                           <UserX className="h-3.5 w-3.5 mr-1.5" />
-                          Cabut Akses
+                          {token.userRevoked ? 'Revoked' : 'Cabut Akses'}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -366,7 +424,7 @@ export function TokensPage({ }: TokensPageProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Revoke Access</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to revoke access for <strong>{tokenToRevoke?.usedBy?.name}</strong>?
+              Are you sure you want to revoke access for <strong>{tokenToRevoke?.usedByName}</strong>?
               They will no longer be able to access the system.
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -9,7 +9,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "wrangler d1 migrations apply kotemon-jastip-db",
-    "db:migrate:local": "wrangler d1 migrations apply kotemon-jastip-db --local"
+    "db:migrate:local": "wrangler d1 migrations apply kotemon-jastip-db --local",
+    "db:wipe:local": "wrangler d1 execute kotemon-jastip-db --file=./scripts/wipe_users.sql --local"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.1.11",

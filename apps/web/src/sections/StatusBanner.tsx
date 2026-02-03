@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Clock, Package, Calendar } from 'lucide-react';
+import { Clock, Package, Calendar, AlertTriangle } from 'lucide-react';
 import type { JastipStatus } from '@/types';
 
 interface StatusBannerProps {
@@ -19,6 +19,10 @@ export function StatusBanner({ status }: StatusBannerProps) {
 
   const quotaRemaining = status.quotaTotal - status.quotaUsed;
   const quotaPercentage = Math.round((status.quotaUsed / status.quotaTotal) * 100);
+
+  // Check if dates are synchronized (arrival should be after close)
+  const isDateSyncIssue = status.closeDate && status.arrivalDate && 
+    new Date(status.arrivalDate) < new Date(status.closeDate);
 
   return (
     <div className="w-full bg-secondary/10 border-b border-secondary/20">
@@ -78,12 +82,20 @@ export function StatusBanner({ status }: StatusBannerProps) {
           </div>
 
           {/* Arrival Date */}
-          <div className="flex items-center gap-2 text-gray-700">
+          <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-[#74b9ff]" />
             <span className="text-sm">
               Estimasi sampai:{' '}
-              <span className="font-medium text-gray-900">{status.arrivalDate}</span>
+              <span className={`font-medium ${isDateSyncIssue ? 'text-red-600' : 'text-gray-900'}`}>
+                {status.arrivalDate}
+              </span>
             </span>
+            {isDateSyncIssue && (
+              <span className="text-xs text-red-600 flex items-center gap-1" title="Estimasi harus setelah tanggal tutup">
+                <AlertTriangle className="h-3 w-3" />
+                (sebelum tutup!)
+              </span>
+            )}
           </div>
         </div>
       </div>

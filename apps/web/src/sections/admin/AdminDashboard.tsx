@@ -125,6 +125,13 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
       color: 'from-gray-500 to-gray-600',
       onClick: () => onNavigate('settings'),
     },
+    {
+      title: 'Kelola Orders',
+      description: 'Manage customer orders',
+      icon: ShoppingCart,
+      color: 'from-orange-500 to-red-500',
+      onClick: () => onNavigate('orders'),
+    },
   ];
 
   return (

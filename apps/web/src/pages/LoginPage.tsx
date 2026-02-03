@@ -43,25 +43,23 @@ export function LoginPage({ onLogin, error }: LoginPageProps) {
   return (
     <div className="min-h-screen bg-muted flex items-center justify-center p-4">
       <Card className="w-full max-w-md relative shadow-xl border-0">
-        <CardHeader className="text-center space-y-6 pt-8">
+        <CardHeader className="text-center space-y-2 pt-8">
           {/* Logo */}
-          <div className="mx-auto">
+          <div className="mx-auto mb-4">
             <div className="w-16 h-16 mx-auto rounded-2xl bg-primary flex items-center justify-center shadow-lg">
               <ShoppingBag className="h-8 w-8 text-white" />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <CardTitle className="text-2xl font-bold text-foreground">
-              Selamat Datang
-            </CardTitle>
-            <CardDescription className="text-muted-foreground">
-              Masuk untuk melihat koleksi jastip Jepang & Korea
-            </CardDescription>
-          </div>
+          <CardTitle className="text-2xl font-bold text-foreground">
+            Selamat Datang di Kotemon Jastip
+          </CardTitle>
+          <CardDescription className="text-muted-foreground text-base">
+            Situs ini khusus undangan (Invite Only)
+          </CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-4 pb-8">
+        <CardContent className="space-y-6 pb-8">
           {error && (
             <Alert variant="destructive" className="bg-red-50 border-red-200">
               <AlertCircle className="h-4 w-4 text-red-600" />
@@ -69,23 +67,54 @@ export function LoginPage({ onLogin, error }: LoginPageProps) {
             </Alert>
           )}
 
-          <Button
-            variant="outline"
-            className="w-full h-12 text-base font-medium border-border hover:bg-accent hover:border-border transition-colors"
-            onClick={handleGoogleLogin}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            ) : (
-              <GoogleLogo />
-            )}
-            {isLoading ? 'Memuat...' : 'Lanjutkan dengan Google'}
-          </Button>
+          <div className="space-y-3">
+            <div className="text-sm font-medium text-center text-muted-foreground">
+              Sudah punya akun?
+            </div>
+            <Button
+              variant="outline"
+              className="w-full h-12 text-base font-medium border-border hover:bg-accent hover:border-border transition-colors flex items-center justify-center gap-2"
+              onClick={handleGoogleLogin}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <GoogleLogo />
+              )}
+              {isLoading ? 'Memuat...' : 'Masuk dengan Google'}
+            </Button>
+          </div>
 
-          <p className="text-center text-sm text-muted-foreground pt-4">
-            Dengan masuk, kamu menyetujui syarat dan ketentuan kami
-          </p>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                Atau
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-3 text-center">
+            <div className="text-sm font-medium text-muted-foreground">
+              Belum punya akun?
+            </div>
+            <Button
+              asChild
+              variant="ghost"
+              className="w-full h-auto py-2 text-primary hover:text-primary/90 hover:bg-primary/5"
+            >
+              <a
+                href="https://t.me/dkotama"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Hubungi Kotemon di Telegram
+              </a>
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

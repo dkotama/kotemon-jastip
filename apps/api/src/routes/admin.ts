@@ -63,6 +63,7 @@ const updateSettingsSchema = z.object({
   jastipStatus: z.enum(['open', 'closed']).optional(),
   jastipCloseDate: z.string().nullable().optional(),
   estimatedArrivalDate: z.string().nullable().optional(),
+  itemCategories: z.array(z.string()).optional(),
 })
 
 adminRoutes.patch('/settings', zValidator('json', updateSettingsSchema), async (c) => {
@@ -111,7 +112,7 @@ const createItemSchema = z.object({
   isLimitedEdition: z.boolean().optional().default(false),
   isPreorder: z.boolean().optional().default(false),
   isFragile: z.boolean().optional().default(false),
-  category: z.enum(['snack', 'skincare', 'makeup', 'stationery', 'gift', 'beverage', 'accessories']).optional(),
+  category: z.string().optional(),
   infoNotes: z.array(z.object({
     type: z.enum(['amber', 'purple', 'blue', 'red']),
     text: z.string().min(1),

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Loader2, Lock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,11 +22,23 @@ export function TokenVerifyPage({ tempToken, googleProfile, onVerified, onError 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const hasAutoSubmitted = useRef(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Auto-submit on mount if pendingInviteCode is in sessionStorage
+  useEffect(() => {
+    if (hasAutoSubmitted.current) return;
 
-    if (code.length !== 5) {
+    const pendingCode = sessionStorage.getItem('pendingInviteCode');
+    if (pendingCode && pendingCode.length === 5) {
+      sessionStorage.removeItem('pendingInviteCode');
+      hasAutoSubmitted.current = true;
+      setCode(pendingCode);
+      submitCode(pendingCode);
+    }
+  }, []);
+
+  const submitCode = async (codeToSubmit: string) => {
+    if (codeToSubmit.length !== 5) {
       setError('Kode harus 5 digit');
       return;
     }
@@ -35,7 +47,7 @@ export function TokenVerifyPage({ tempToken, googleProfile, onVerified, onError 
     setError(null);
 
     try {
-      await authApi.verifyToken(code, tempToken);
+      await authApi.verifyToken(codeToSubmit, tempToken);
       setSuccess(true);
       setTimeout(() => {
         onVerified?.();
@@ -47,6 +59,11 @@ export function TokenVerifyPage({ tempToken, googleProfile, onVerified, onError 
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitCode(code);
   };
 
   // Render digit inputs

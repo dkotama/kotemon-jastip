@@ -13,9 +13,9 @@ export async function getSettings(db: D1Database): Promise<Settings | null> {
   const result = await db.prepare('SELECT * FROM settings WHERE id = ?')
     .bind('default')
     .first()
-  
+
   if (!result) return null
-  
+
   return {
     id: result.id as 'default',
     exchangeRate: result.exchange_rate as number,
@@ -25,6 +25,7 @@ export async function getSettings(db: D1Database): Promise<Settings | null> {
     jastipCloseDate: result.jastip_close_date as string | null,
     estimatedArrivalDate: result.estimated_arrival_date as string | null,
     adminPasswordHash: result.admin_password_hash as string,
+    itemCategories: result.item_categories ? JSON.parse(result.item_categories as string) : [],
     updatedAt: result.updated_at as string,
   }
 }
@@ -35,7 +36,7 @@ export async function updateSettings(
 ): Promise<Settings | null> {
   const fields: string[] = []
   const values: (string | number | null)[] = []
-  
+
   if (updates.exchangeRate !== undefined) {
     fields.push('exchange_rate = ?')
     values.push(updates.exchangeRate)
@@ -64,14 +65,18 @@ export async function updateSettings(
     fields.push('admin_password_hash = ?')
     values.push(updates.adminPasswordHash)
   }
-  
+  if (updates.itemCategories !== undefined) {
+    fields.push('item_categories = ?')
+    values.push(JSON.stringify(updates.itemCategories))
+  }
+
   if (fields.length === 0) return getSettings(db)
-  
+
   values.push('default')
-  
+
   const query = `UPDATE settings SET ${fields.join(', ')} WHERE id = ?`
   await db.prepare(query).bind(...values).run()
-  
+
   return getSettings(db)
 }
 
@@ -87,10 +92,10 @@ export async function getItems(
   } = {}
 ): Promise<Item[]> {
   const { onlyAvailable = false, onlyPublished = false, search, limit = 100, offset = 0 } = options
-  
+
   let whereClause = ''
   const params: (string | number)[] = []
-  
+
   if (onlyAvailable && onlyPublished) {
     whereClause = 'WHERE is_available = 1 AND is_draft = 0'
   } else if (onlyAvailable) {
@@ -98,19 +103,19 @@ export async function getItems(
   } else if (onlyPublished) {
     whereClause = 'WHERE is_draft = 0'
   }
-  
+
   if (search) {
     whereClause = whereClause ? `${whereClause} AND (name LIKE ? OR description LIKE ?)` : 'WHERE (name LIKE ? OR description LIKE ?)'
     params.push(`%${search}%`, `%${search}%`)
   }
-  
+
   params.push(limit, offset)
-  
+
   const query = `SELECT * FROM items ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`
   const result = await db.prepare(query).bind(...params).all()
-  
+
   if (!result.results) return []
-  
+
   return result.results.map(rowToItem)
 }
 
@@ -147,7 +152,7 @@ export async function createItem(db: D1Database, item: Omit<Item, 'createdAt' | 
     item.isAvailable ? 1 : 0,
     item.isDraft ? 1 : 0
   ).run()
-  
+
   return getItemById(db, item.id) as Promise<Item>
 }
 
@@ -158,7 +163,7 @@ export async function updateItem(
 ): Promise<Item | null> {
   const fields: string[] = []
   const values: (string | number | null)[] = []
-  
+
   if (updates.name !== undefined) {
     fields.push('name = ?')
     values.push(updates.name)
@@ -231,14 +236,14 @@ export async function updateItem(
     fields.push('view_count = ?')
     values.push(updates.viewCount)
   }
-  
+
   if (fields.length === 0) return getItemById(db, id)
-  
+
   values.push(id)
-  
+
   const query = `UPDATE items SET ${fields.join(', ')} WHERE id = ?`
   await db.prepare(query).bind(...values).run()
-  
+
   return getItemById(db, id)
 }
 
@@ -256,7 +261,7 @@ export async function incrementItemViewCount(db: D1Database, id: string): Promis
   await db.prepare(`
     UPDATE items SET view_count = view_count + 1 WHERE id = ?
   `).bind(id).run()
-  
+
   const result = await db.prepare('SELECT view_count FROM items WHERE id = ?').bind(id).first()
   return result ? (result.view_count as number) : null
 }
@@ -276,7 +281,7 @@ function rowToItem(row: Record<string, unknown>): Item {
     isLimitedEdition: Boolean(row.is_limited_edition),
     isPreorder: Boolean(row.is_preorder),
     isFragile: Boolean(row.is_fragile),
-    category: (row.category as Item['category']) || null,
+    category: (row.category as string) || null,
     infoNotes: row.info_notes ? JSON.parse(row.info_notes as string) as Item['infoNotes'] : [],
     maxOrders: row.max_orders as number,
     currentOrders: row.current_orders as number,
@@ -292,13 +297,13 @@ function rowToItem(row: Record<string, unknown>): Item {
 export async function calculateRemainingQuota(db: D1Database): Promise<number> {
   const settings = await getSettings(db)
   if (!settings) return 0
-  
+
   const result = await db.prepare(`
     SELECT COALESCE(SUM(weight_grams * current_orders), 0) as used
     FROM items
     WHERE is_available = 1 AND is_draft = 0
   `).first()
-  
+
   const usedGrams = (result?.used as number) || 0
   return settings.totalBaggageQuotaGrams - usedGrams
 }
@@ -314,20 +319,20 @@ export interface IndexItemsResult {
 export async function getItemsForIndex(db: D1Database): Promise<IndexItemsResult> {
   // Get all available items first
   const allItems = await getItems(db, { onlyAvailable: true, onlyPublished: true, limit: 1000 })
-  
+
   // Latest: 8 newest items
   const latest = allItems.slice(0, 8)
-  
+
   // Featured: limited edition or preorder items (up to 8)
   const featured = allItems
     .filter(item => item.isLimitedEdition || item.isPreorder)
     .slice(0, 8)
-  
+
   // Popular: sort by view_count descending (up to 8)
   const popular = [...allItems]
     .sort((a, b) => b.viewCount - a.viewCount)
     .slice(0, 8)
-  
+
   return {
     latest,
     featured,
@@ -363,7 +368,7 @@ export async function createUser(
   user: Omit<User, 'createdAt' | 'lastLoginAt' | 'isRevoked' | 'revokedAt' | 'revokedBy'>
 ): Promise<User> {
   const now = new Date().toISOString()
-  
+
   await db.prepare(`
     INSERT INTO users (id, google_id, email, name, photo_url, token_id, is_revoked, revoked_at, revoked_by, created_at, last_login_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -380,7 +385,7 @@ export async function createUser(
     now,
     now
   ).run()
-  
+
   return getUserById(db, user.id) as Promise<User>
 }
 
@@ -439,7 +444,7 @@ export async function createToken(
   token: Omit<Token, 'createdAt' | 'usedAt' | 'usedBy'>
 ): Promise<Token> {
   const now = new Date().toISOString()
-  
+
   await db.prepare(`
     INSERT INTO tokens (id, code, created_by, used_by, used_at, expires_at, is_revoked, created_at)
     VALUES (?, ?, ?, NULL, NULL, ?, ?, ?)
@@ -451,7 +456,7 @@ export async function createToken(
     token.isRevoked ? 1 : 0,
     now
   ).run()
-  
+
   return getTokenById(db, token.id) as Promise<Token>
 }
 
@@ -472,23 +477,23 @@ export async function revokeToken(db: D1Database, id: string): Promise<void> {
 
 export async function isTokenValid(db: D1Database, code: string): Promise<{ valid: boolean; token?: Token; error?: string }> {
   const token = await getTokenByCode(db, code)
-  
+
   if (!token) {
     return { valid: false, error: 'Invalid token' }
   }
-  
+
   if (token.isRevoked) {
     return { valid: false, token, error: 'Token has been revoked' }
   }
-  
+
   if (token.usedBy) {
     return { valid: false, token, error: 'Token has already been used' }
   }
-  
+
   if (token.expiresAt && new Date(token.expiresAt) < new Date()) {
     return { valid: false, token, error: 'Token has expired' }
   }
-  
+
   return { valid: true, token }
 }
 
